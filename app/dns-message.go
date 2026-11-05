@@ -17,7 +17,7 @@ func NewRequestDnsMessage(data []byte) (DNSMessage, error) {
 
 // used for building a response DNS
 func NewResponseDnsMessage() (DNSMessage, error) {
-	data := make([]byte, HEADER_SIZE)
+	data := make([]byte, 0, HEADER_SIZE)
 	// manually building it as of now with hardcoded values to test expected values
 
 	// header is the first 12 bytes
