@@ -5,15 +5,7 @@ import (
 	"net"
 )
 
-// Ensures gofmt doesn't remove the "net" import in stage 1 (feel free to remove this!)
-var _ = net.ListenUDP
-
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Println("Logs from your program will appear here!")
-
-	// TODO: Uncomment the code below to pass the first stage
-
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
 	if err != nil {
 		fmt.Println("Failed to resolve UDP address:", err)
@@ -27,6 +19,7 @@ func main() {
 	}
 	defer udpConn.Close()
 
+	// UDP transport are limited to 512 bytes
 	buf := make([]byte, 512)
 
 	for {
@@ -39,10 +32,15 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
-		// Create an empty response
-		response := []byte{}
+		// DNS consumes the same message format as its response as well
+		// so to pass stage, just grabbing the raw bytes and sending it in response
+		dnsMessage, err := NewDNSMessage(buf[:size])
+		if err != nil {
+			fmt.Println("Error creating DNSMessage:", err)
+			break
+		}
 
-		_, err = udpConn.WriteToUDP(response, source)
+		_, err = udpConn.WriteToUDP(dnsMessage.data, source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
