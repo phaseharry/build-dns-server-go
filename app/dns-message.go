@@ -29,13 +29,13 @@ func NewRequestDnsMessage(data []byte) (DNSMessage, error) {
 // used for building a response DNS
 func NewResponseDnsMessage() (DNSMessage, error) {
 	dnsMessage := DNSMessage{
-		Header:   buildHeader(),
+		Header:   buildHeader(1), // harding to 1 question as of now
 		Question: buildQuestion(),
 	}
 	return dnsMessage, nil
 }
 
-func buildHeader() []byte {
+func buildHeader(questionCount int) []byte {
 	header := make([]byte, 0, HEADER_SIZE)
 	// manually building it as of now with hardcoded values to test expected values
 
@@ -57,8 +57,9 @@ func buildHeader() []byte {
 	// Response Code (RCODE)	4 bits	Response code indicating the status of the response.
 	header = append(header, byte(0b00000000))
 
-	// 2 bytes for Question Count
-	header = append(header, []byte{0, 0}...)
+	// 2 bytes for Question Count (Big Endian)
+	questionCountSlot := make([]byte, 2)
+	binary.BigEndian.PutUint16(questionCountSlot, uint16(questionCount))
 
 	// 2 bytes for Answer Record Count
 	header = append(header, []byte{0, 0}...)
