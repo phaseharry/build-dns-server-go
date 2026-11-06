@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net"
+
+	message "github.com/codecrafters-io/dns-server-starter-go/internal/dns-message"
 )
 
 func main() {
@@ -34,16 +36,16 @@ func main() {
 
 		// DNS consumes the same message format as its response as well
 		// so to pass stage, just grabbing the raw bytes and sending it in response
-		reqDNSMessage, err := NewRequestDnsMessage(buf[:size])
+		reqDNSMessage, err := message.NewRequestDnsMessage(buf[:size])
 		if err != nil {
 			fmt.Println("Error parsing requestDNSMessage:", err)
-			break
+			continue
 		}
 
-		responseDNSMEssage, err := NewResponseDnsMessage(reqDNSMessage.Header)
+		responseDNSMEssage, err := message.NewResponseDnsMessage(reqDNSMessage)
 		if err != nil {
 			fmt.Println("Error creating respose DNSMessage:", err)
-			break
+			continue
 		}
 		_, err = udpConn.WriteToUDP(responseDNSMEssage.GetData(), source)
 		if err != nil {
