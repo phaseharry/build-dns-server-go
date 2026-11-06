@@ -130,11 +130,11 @@ func buildAnswer() []byte {
 
 	// TTL: 4 bytes
 	ttl := make([]byte, 0, 4)
-	ttl = binary.BigEndian.AppendUint32(class, 60)
+	ttl = binary.BigEndian.AppendUint32(ttl, 60)
 
 	// Length: 2 bytes encoded as a 2-byte big-endian int (corresponds to the length of the RDATA field)
 	rDataLength := make([]byte, 0, 2)
-	rDataLength = binary.BigEndian.AppendUint16(class, 4)
+	rDataLength = binary.BigEndian.AppendUint16(rDataLength, 4)
 
 	// Data: IPv4 address encoded as a 4-byte big-endian int. For example: \x08\x08\x08\x08 (that's 8.8.8.8 encoded as a 4-byte integer)
 	data := []byte{0x08, 0x08, 0x08, 0x08}
