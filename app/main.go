@@ -34,13 +34,13 @@ func main() {
 
 		// DNS consumes the same message format as its response as well
 		// so to pass stage, just grabbing the raw bytes and sending it in response
-		_, err = NewRequestDnsMessage(buf[:size])
+		reqDNSMessage, err := NewRequestDnsMessage(buf[:size])
 		if err != nil {
 			fmt.Println("Error parsing requestDNSMessage:", err)
 			break
 		}
 
-		responseDNSMEssage, err := NewResponseDnsMessage()
+		responseDNSMEssage, err := NewResponseDnsMessage(reqDNSMessage.Header)
 		if err != nil {
 			fmt.Println("Error creating respose DNSMessage:", err)
 			break
