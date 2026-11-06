@@ -65,7 +65,7 @@ func buildResponseHeader(reqHeader DNSHeader) DNSHeader {
 	// 5th & 6th byte
 	header = append(header, reqHeader.GetQuestionCount()...)
 	// 7th & 8th byte
-	header = append(header, reqHeader.GetAnswerCount()...)
+	header = append(header, []byte{1, 0}...)
 	// 9th & 10th byte
 	header = append(header, reqHeader.GetAuthorityCount()...)
 	// 11th & 12th byte
