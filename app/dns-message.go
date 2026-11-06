@@ -32,6 +32,7 @@ func NewResponseDnsMessage() (DNSMessage, error) {
 	dnsMessage := DNSMessage{
 		Header:   buildHeader(1), // harding to 1 question as of now
 		Question: buildQuestion(),
+		Answer:   buildAnswer(),
 	}
 	return dnsMessage, nil
 }
@@ -111,7 +112,7 @@ func buildQuestion() []byte {
 }
 
 func buildAnswer() []byte {
-	answer := make([]byte, 0)
+	answer := make([]byte, 0, 14)
 
 	// domain name 1 byte for size & the rest being the actual domain name
 	domain := []byte("codecrafters")
@@ -138,6 +139,18 @@ func buildAnswer() []byte {
 	// Data: IPv4 address encoded as a 4-byte big-endian int. For example: \x08\x08\x08\x08 (that's 8.8.8.8 encoded as a 4-byte integer)
 	data := []byte{0x08, 0x08, 0x08, 0x08}
 
+	answer = append(answer, byte(domainLength))
+	answer = append(answer, domain...)
+	answer = append(answer, byte(extensionLength))
+	answer = append(answer, extension...)
+	answer = append(answer, NULL)
+
+	answer = append(answer, questionType...)
+	answer = append(answer, class...)
+	answer = append(answer, ttl...)
+	answer = append(answer, rDataLength...)
+	answer = append(answer, data...)
+
 	return answer
 }
 
@@ -146,6 +159,7 @@ func (d *DNSMessage) GetData() []byte {
 
 	data = append(data, d.Header...)
 	data = append(data, d.Question...)
+	data = append(data, d.Answer...)
 
 	// fmt.Printf("% x\n", data)
 	fmt.Print(hex.Dump(data))
