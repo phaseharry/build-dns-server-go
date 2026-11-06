@@ -14,6 +14,7 @@ const NULL = byte('\x00')
 type DNSMessage struct {
 	Header   []byte
 	Question []byte
+	Answer   []byte
 	Data     []byte
 }
 
@@ -63,7 +64,11 @@ func buildHeader(questionCount int) []byte {
 	header = append(header, questionCountSlot...)
 
 	// 2 bytes for Answer Record Count
-	header = append(header, []byte{0, 0}...)
+	answerCountLot := make([]byte, 2)
+	// assuming answer count should always sync with question count as each question is always answered
+	// can even remove the answerSlot and just append the question slot twice (maybe??)
+	binary.BigEndian.PutUint16(answerCountLot, uint16(questionCount))
+	header = append(header, answerCountLot...)
 
 	// 2 bytes for Authority Record Count
 	header = append(header, []byte{0, 0}...)
@@ -103,6 +108,37 @@ func buildQuestion() []byte {
 	question = append(question, class...)
 
 	return question
+}
+
+func buildAnswer() []byte {
+	answer := make([]byte, 0)
+
+	// domain name 1 byte for size & the rest being the actual domain name
+	domain := []byte("codecrafters")
+	domainLength := len(domain)
+	extension := []byte("io")
+	extensionLength := len(extension)
+
+	// Type: 2-byte int; the type of record (1 for an A record, 5 for a CNAME record etc., full list here)
+	questionType := make([]byte, 0, 2)
+	questionType = binary.BigEndian.AppendUint16(questionType, 1)
+
+	// Class: 2-byte int; usually set to 1 (full list here)
+	class := make([]byte, 0, 2)
+	class = binary.BigEndian.AppendUint16(class, 1)
+
+	// TTL: 4 bytes
+	ttl := make([]byte, 0, 4)
+	ttl = binary.BigEndian.AppendUint32(class, 60)
+
+	// Length: 2 bytes encoded as a 2-byte big-endian int (corresponds to the length of the RDATA field)
+	rDataLength := make([]byte, 0, 2)
+	rDataLength = binary.BigEndian.AppendUint16(class, 4)
+
+	// Data: IPv4 address encoded as a 4-byte big-endian int. For example: \x08\x08\x08\x08 (that's 8.8.8.8 encoded as a 4-byte integer)
+	data := []byte{0x08, 0x08, 0x08, 0x08}
+
+	return answer
 }
 
 func (d *DNSMessage) GetData() []byte {
