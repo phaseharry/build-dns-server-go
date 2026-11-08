@@ -91,6 +91,10 @@ func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 //	01xxxxxx, 10xxxxxx -> reserved, treat as an error
 func getLabels(data []byte, start int) ([]string, int, error) {
 	labels := []string{}
+	if start >= len(data) {
+		return labels, 0, fmt.Errorf("invalid start index being greater or equal to data length, start: %d, length: %d", start, len(data))
+	}
+
 	ptr := start
 
 	for ptr < len(data) {
@@ -120,13 +124,13 @@ func getLabels(data []byte, start int) ([]string, int, error) {
 			//
 			// pointer (c0 10) lands on byte 16, label: `example`. the expected label output for this pointer is `example.com`
 			//
-			// pointer (c0 18) lands on byte 18, label: `com`. the expected label output for this pointer is `com`
+			// pointer (c0 18) lands on byte 24, label: `com`. the expected label output for this pointer is `com`
 			//
 			// to achieve this, we do the following:
-			// we will call getLabel recursively when it sees a pointer to start iterating through labels at a different question's name to pull it to the current question's name
+			// we will call getLabels recursively when it sees a pointer to start iterating through labels at a different question's name to pull it to the current question's name
 			referencedLabels, _, err := getLabels(data, offset)
 			if err != nil {
-				return labels, ptr - start, fmt.Errorf("error while resolving label pointer: %s", err.Error())
+				return labels, ptr - start, fmt.Errorf("error while resolving label pointer: %w", err)
 			}
 			iterated += 1
 			labels = append(labels, referencedLabels...)
@@ -134,10 +138,12 @@ func getLabels(data []byte, start int) ([]string, int, error) {
 		}
 		invalid := (prefixShifted == 0b10 || prefixShifted == 0b01)
 		if invalid {
-			return labels, (ptr + iterated) - start, fmt.Errorf("invalid prefix byte with only one of its two leftmost bit set. either it's both set to indicate a pointer or both are not set indicating a label")
+			return labels, (ptr + iterated) - start, fmt.Errorf("reserved label type at offset %d: 0x%02x (top two bits must be 00 for a label or 11 for a pointer)", ptr, prefix)
 		}
 
 		if prefix == NULL {
+			// count the NULL byte itself so the caller lands on TYPE instead of on the NULL
+			ptr += iterated
 			break
 		}
 
@@ -146,7 +152,7 @@ func getLabels(data []byte, start int) ([]string, int, error) {
 			return labels, ptr - start, fmt.Errorf("invalid label processing, length value is greater than the amount of bytes remaining")
 		}
 		iterated += length
-		labels = append(labels, string(data[ptr:ptr+length]))
+		labels = append(labels, string(data[ptr+1:ptr+1+length]))
 		ptr += iterated
 	}
 	return labels, ptr - start, nil
