@@ -11,12 +11,15 @@ const NULL = byte('\x00')
 type DNSMessage struct {
 	Header    DNSHeader
 	Questions []Question
-	Answer    []byte
+	Answers   []Answer
 }
 
 // takes an incoming DNS request message and parses its values
 func NewRequestDnsMessage(data []byte) (DNSMessage, error) {
-	dnsHeader := DNSHeader{data[:HEADER_SIZE]}
+	dnsHeader, err := parseHeader(data)
+	if err != nil {
+		return DNSMessage{}, err
+	}
 	questions, err := parseQuestions(data, dnsHeader)
 	if err != nil {
 		return DNSMessage{}, err
@@ -33,7 +36,7 @@ func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 	// automatically start pointer at HEADER_SIZE to skip the initial 12 bytes becoming to the header
 	ptr := HEADER_SIZE
 
-	questionCount := int(binary.BigEndian.Uint16(dnsHeader.GetQuestionCount()))
+	questionCount := int(dnsHeader.QuestionCount)
 
 	for range questionCount {
 		if ptr >= len(data) {
@@ -166,88 +169,64 @@ func NewResponseDnsMessage(reqMessage DNSMessage) (DNSMessage, error) {
 	}
 
 	dnsMessage := DNSMessage{
-		Header:    buildResponseHeader(reqMessage.Header),
+		Header:    buildResponseHeader(reqMessage.Header, uint16(len(answers))),
 		Questions: reqMessage.Questions,
-		Answer:    answers,
+		Answers:   answers,
 	}
 	return dnsMessage, nil
 }
 
-func buildResponseHeader(reqHeader DNSHeader) DNSHeader {
-	header := make([]byte, 0, HEADER_SIZE)
-	// 1st & 2nd bytes
-	header = append(header, reqHeader.GetID()...)
-
-	// 3rd byte
-	var thirdByte byte
-	// bitwise OR to add a bit into the byte
-	// adding the response bit
-	thirdByte |= 0b10000000
-	// get OPCODE and then shift it left 3 bits
-	thirdByte |= (0b01111000 & (reqHeader.GetOpCode() << 3))
-	// recursive bit
-	if reqHeader.IsRecursiveDesired() {
-		thirdByte |= 0b00000001
+func buildResponseHeader(reqHeader DNSHeader, answerCount uint16) DNSHeader {
+	header := DNSHeader{
+		ID:               reqHeader.ID,
+		QRIndicator:      true,
+		OpCode:           reqHeader.OpCode,
+		RecursionDesired: reqHeader.RecursionDesired,
+		QuestionCount:    reqHeader.QuestionCount,
+		AnswerCount:      answerCount,
+		AuthorityCount:   reqHeader.AuthorityCount,
+		AdditionalCount:  reqHeader.AdditionalCount,
 	}
-	header = append(header, thirdByte)
 
-	// 4th byte
-	var fourthByte byte
 	// if OPCODE != 0, set the response code to 4, otherwise keep it 0
-	if reqHeader.GetOpCode() != 0 {
-		fourthByte |= 0b00000100
+	if reqHeader.OpCode != 0 {
+		header.ResponseCode = 4
 	}
-	header = append(header, fourthByte)
-	// 5th & 6th byte
-	header = append(header, reqHeader.GetQuestionCount()...)
-	// 7th & 8th byte
-	header = append(header, []byte{1, 0}...)
-	// 9th & 10th byte
-	header = append(header, reqHeader.GetAuthorityCount()...)
-	// 11th & 12th byte
-	header = append(header, reqHeader.GetAdditionalCount()...)
 
-	return DNSHeader{header}
+	return header
 }
 
-func buildAnswers(reqMessage DNSMessage) ([]byte, error) {
-	answer := make([]byte, 0, 14)
+func buildAnswers(reqMessage DNSMessage) ([]Answer, error) {
+	answers := make([]Answer, 0, len(reqMessage.Questions))
 
 	for _, q := range reqMessage.Questions {
-		data := make([]byte, 0)
-		// answers are structured such that it is always prefixed by the question's payload before any of the answer's data is sent.
-		// so we can just append the full question by payload before we reply to answer specific details
-		data = append(data, q.Bytes()...)
-
-		// TTL: 4 bytes
-		ttl := make([]byte, 0, 4)
-		ttl = binary.BigEndian.AppendUint32(ttl, 60)
-		data = append(data, ttl...)
-
-		// Length: 2 bytes encoded as a 2-byte big-endian int (corresponds to the length of the RDATA field)
-		rDataLength := make([]byte, 0, 2)
-		rDataLength = binary.BigEndian.AppendUint16(rDataLength, 4)
-		data = append(data, rDataLength...)
-
-		// Data: IPv4 address encoded as a 4-byte big-endian int. For example: \x08\x08\x08\x08 (that's 8.8.8.8 encoded as a 4-byte integer)
-		data = append(data, []byte{0x08, 0x08, 0x08, 0x08}...)
-
-		answer = append(answer, data...)
+		answers = append(answers, Answer{
+			// an answer's name, type, and class are laid out the same way as a question's.
+			// here each question gets answered for the same name, type, and class it asked about
+			Name:  q.Name,
+			Type:  q.Type,
+			Class: q.Class,
+			TTL:   60,
+			// Data: IPv4 address encoded as a 4-byte big-endian int. For example: \x08\x08\x08\x08 (that's 8.8.8.8 encoded as a 4-byte integer)
+			Data: []byte{0x08, 0x08, 0x08, 0x08},
+		})
 	}
 
-	return answer, nil
+	return answers, nil
 }
 
-func (d *DNSMessage) GetData() []byte {
+func (d *DNSMessage) Bytes() []byte {
 	data := []byte{}
 
-	data = append(data, d.Header.data...)
+	data = append(data, d.Header.Bytes()...)
 
 	for _, q := range d.Questions {
 		data = append(data, q.Bytes()...)
 	}
 
-	data = append(data, d.Answer...)
+	for _, a := range d.Answers {
+		data = append(data, a.Bytes()...)
+	}
 
 	// fmt.Printf("% x\n", data)
 	fmt.Print(hex.Dump(data))

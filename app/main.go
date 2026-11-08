@@ -47,7 +47,7 @@ func main() {
 			fmt.Println("Error creating respose DNSMessage:", err)
 			continue
 		}
-		_, err = udpConn.WriteToUDP(responseDNSMEssage.GetData(), source)
+		_, err = udpConn.WriteToUDP(responseDNSMEssage.Bytes(), source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
