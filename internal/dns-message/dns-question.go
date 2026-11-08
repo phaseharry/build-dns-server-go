@@ -1,40 +1,25 @@
 package message
 
-import (
-	"bytes"
-	"fmt"
-)
+import "encoding/binary"
 
 type Question struct {
-	data []byte
+	Name  []string
+	Type  uint16
+	Class uint16
 }
 
-// Type: 2-byte int; the type of record (1 for an A record, 5 for a CNAME record etc., full list here)
-func (q Question) GetType() ([]byte, error) {
-	questionType := make([]byte, 0, 2)
+func (q Question) Bytes() []byte {
+	data := []byte{}
 
-	_, after, found := bytes.Cut(q.data, []byte{NULL})
-	if !found {
-		return questionType, fmt.Errorf("Malformed, unable to find NULL byte in question.")
+	for _, label := range q.Name {
+		labelLength := len(label)
+		data = append(data, byte(labelLength))
+		data = append(data, []byte(label)...)
 	}
-	if len(after) < 2 {
-		return questionType, fmt.Errorf("Malformed, missing 2 bytes for the question type.")
-	}
-	questionType = append(questionType, after[:2]...)
-	return questionType, nil
-}
+	data = append(data, NULL)
 
-// Class: 2-byte int; usually set to 1 (full list here)
-func (q Question) GetClass() ([]byte, error) {
-	class := make([]byte, 0, 2)
+	data = binary.BigEndian.AppendUint16(data, q.Type)
+	data = binary.BigEndian.AppendUint16(data, q.Class)
 
-	_, after, found := bytes.Cut(q.data, []byte{NULL})
-	if !found {
-		return class, fmt.Errorf("Malformed, unable to find NULL byte in question.")
-	}
-	if len(after) < 4 {
-		return class, fmt.Errorf("Malformed, missing 2 bytes for the class.")
-	}
-	class = append(class, after[2:4]...)
-	return class, nil
+	return data
 }
