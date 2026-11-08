@@ -43,7 +43,7 @@ func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 		}
 
 		// name processing:
-		labels, iterated, err := getLabels(data, ptr, labelCache)
+		labels, iterated, err := getLabels(data, ptr)
 		if err != nil {
 			return questions, err
 		}
@@ -91,7 +91,7 @@ func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 //	00xxxxxx -> label length, where 00000000 is the NULL byte that ends the name
 //	11xxxxxx -> pointer
 //	01xxxxxx, 10xxxxxx -> reserved, treat as an error
-func getLabels(data []byte, start int, labelCache map[int]string) ([]string, int, error) {
+func getLabels(data []byte, start int) ([]string, int, error) {
 	labels := []string{}
 	ptr := start
 
@@ -115,13 +115,6 @@ func getLabels(data []byte, start int, labelCache map[int]string) ([]string, int
 			// 3. order the newly shifted int value with the 2nd byte to get the offset. 0b0011111100000000 <- 0b0011111101011001
 			// assuming, the first byte is 0b11111111 and the second byte is 0b01011001
 			offset := int(prefix&0b00111111)<<8 | int(data[ptr+1])
-			cachedLabel, ok := labelCache[offset]
-			iterated += 1
-			if !ok {
-				return labels, ptr + iterated, fmt.Errorf("pointer is pointing to an offset we have not seen before")
-			}
-			labels = append(labels, cachedLabel)
-
 			// Note: a pointer lands on a specific label, but it means that label + every label after it until it reaches the end of that name
 			// previous seen label: `abc.example.com` and some pointer scenarios
 			//
@@ -132,14 +125,18 @@ func getLabels(data []byte, start int, labelCache map[int]string) ([]string, int
 			// pointer (c0 18) lands on byte 18, label: `com`. the expected label output for this pointer is `com`
 			//
 			// to achieve this, we do the following:
-			// 1. using offset to get cached label we've seen before
-			// 2. use the cached label's length + the offset and see if there's another cached label to see if there's another label that can be appended to this current pointer output
-			// 3. keep repeating steps 1 and 2 until we cannot find a cached offset to keep appending label values to
-			return labels, start - (ptr + iterated), nil
+			// we will call getLabel recursively when it sees a pointer to start iterating through labels at a different question's name to pull it to the current question's name
+			referencedLabels, _, err := getLabels(data, offset)
+			if err != nil {
+				return labels, ptr - start, fmt.Errorf("error while resolving label pointer: %s", err.Error())
+			}
+			iterated += 1
+			labels = append(labels, referencedLabels...)
+			return labels, (ptr + iterated) - start, nil
 		}
 		invalid := (prefixShifted == 0b10 || prefixShifted == 0b01)
 		if invalid {
-			return labels, ptr + iterated, fmt.Errorf("invalid prefix byte with only one of its two leftmost bit set. either it's both set to indicate a pointer or both are not set indicating a label")
+			return labels, (ptr + iterated) - start, fmt.Errorf("invalid prefix byte with only one of its two leftmost bit set. either it's both set to indicate a pointer or both are not set indicating a label")
 		}
 
 		if prefix == NULL {
@@ -148,14 +145,10 @@ func getLabels(data []byte, start int, labelCache map[int]string) ([]string, int
 
 		length := int(prefix)
 		if ptr+length >= len(data) {
-			return labels, ptr, fmt.Errorf("invalid label processing, length value is greater than the amount of bytes remaining")
+			return labels, ptr - start, fmt.Errorf("invalid label processing, length value is greater than the amount of bytes remaining")
 		}
 		iterated += length
-		label := string(data[ptr : ptr+length])
-
-		labelCache[ptr] = label
-
-		labels = append(labels, label)
+		labels = append(labels, string(data[ptr:ptr+length]))
 		ptr += iterated
 	}
 	return labels, ptr - start, nil
