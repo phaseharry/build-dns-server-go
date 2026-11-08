@@ -30,8 +30,6 @@ func NewRequestDnsMessage(data []byte) (DNSMessage, error) {
 
 func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 	questions := []Question{}
-	// used to store a pointer position to a value so any further labels can easily reference it
-	labelCache := make(map[int]string)
 	// automatically start pointer at HEADER_SIZE to skip the initial 12 bytes becoming to the header
 	ptr := HEADER_SIZE
 
