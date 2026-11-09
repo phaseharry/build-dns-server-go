@@ -59,7 +59,8 @@ func main() {
 			forwardDNSRequests := make([]message.DNSMessage, 0, len(reqDNSMessage.Questions))
 			for _, question := range reqDNSMessage.Questions {
 				forwardedBytes := []byte{}
-				forwardedBytes = append(forwardedBytes, reqDNSMessage.Header.Bytes()...)
+				forwardedHeader := reqDNSMessage.Header.WithQuestionCount(1)
+				forwardedBytes = append(forwardedBytes, forwardedHeader.Bytes()...)
 				forwardedBytes = append(forwardedBytes, question.Bytes()...)
 
 				forwardedDNS, err := message.ParseDNSMessage(forwardedBytes)
@@ -71,7 +72,7 @@ func main() {
 			}
 			if len(forwardDNSRequests) != len(reqDNSMessage.Questions) {
 				fmt.Printf("Error, unable to create the same forward DNS message requests as question count. Want: %d, Got: %d\n", len(reqDNSMessage.Questions), len(forwardDNSRequests))
-				break
+				continue
 			}
 
 			forwardDNSResponse := make([]message.DNSMessage, 0, len(reqDNSMessage.Questions))
@@ -90,7 +91,7 @@ func main() {
 			}
 			if len(forwardDNSRequests) != len(forwardDNSResponse) {
 				fmt.Printf("Error, did not get the same number of response for the requests made. Want: %d, Got: %d\n", len(forwardDNSRequests), len(forwardDNSResponse))
-				break
+				continue
 			}
 
 			questions := reqDNSMessage.Questions
@@ -100,10 +101,10 @@ func main() {
 				answers = append(answers, forwardedRes.Answers...)
 			}
 
-			reqDNSMessage.Header.AnswerCount = uint16(len(answers))
+			resHeader := message.BuildResponseHeader(reqDNSMessage.Header, uint16(len(answers)))
 
 			resDNSMessage := message.DNSMessage{
-				Header:    reqDNSMessage.Header,
+				Header:    resHeader,
 				Questions: questions,
 				Answers:   answers,
 			}

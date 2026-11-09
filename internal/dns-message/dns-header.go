@@ -157,3 +157,9 @@ func (h DNSHeader) Bytes() []byte {
 
 	return data
 }
+
+// manually modifying a copy of the DNSHeader with a new question count
+func (h DNSHeader) WithQuestionCount(count int) DNSHeader {
+	h.QuestionCount = uint16(count)
+	return h
+}

@@ -25,6 +25,10 @@ func ParseDNSMessage(data []byte) (DNSMessage, error) {
 		return DNSMessage{}, err
 	}
 	answers, err := parseAnswer(data, answerPtr, dnsHeader)
+	if err != nil {
+		return DNSMessage{}, err
+	}
+
 	dnsMessage := DNSMessage{
 		Header:    dnsHeader,
 		Questions: questions,
@@ -95,7 +99,7 @@ func parseAnswer(data []byte, startPtr int, dnsHeader DNSHeader) ([]Answer, erro
 		}
 		ptr += iterated
 
-		if ptr+10 >= len(data) {
+		if ptr+10 > len(data) {
 			return answers, fmt.Errorf("Not enough bytes leftover for the Type, Class, TTL, DataLength of the answer")
 		}
 
@@ -105,7 +109,7 @@ func parseAnswer(data []byte, startPtr int, dnsHeader DNSHeader) ([]Answer, erro
 		dataLength := int(binary.BigEndian.Uint16(data[ptr+8 : ptr+10]))
 		ptr += 10
 
-		if ptr+dataLength >= len(data) {
+		if ptr+dataLength > len(data) {
 			return answers, fmt.Errorf("Not enough bytes leftover at ptr %d and a data length of %d to parse the data of the answer", ptr, dataLength)
 		}
 		answerData := data[ptr : ptr+dataLength]
@@ -222,14 +226,14 @@ func NewResponseDnsMessage(reqMessage DNSMessage) (DNSMessage, error) {
 	}
 
 	dnsMessage := DNSMessage{
-		Header:    buildResponseHeader(reqMessage.Header, uint16(len(answers))),
+		Header:    BuildResponseHeader(reqMessage.Header, uint16(len(answers))),
 		Questions: reqMessage.Questions,
 		Answers:   answers,
 	}
 	return dnsMessage, nil
 }
 
-func buildResponseHeader(reqHeader DNSHeader, answerCount uint16) DNSHeader {
+func BuildResponseHeader(reqHeader DNSHeader, answerCount uint16) DNSHeader {
 	header := DNSHeader{
 		ID:               reqHeader.ID,
 		QRIndicator:      true,
