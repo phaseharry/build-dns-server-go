@@ -15,23 +15,25 @@ type DNSMessage struct {
 }
 
 // takes an incoming DNS request message and parses its values
-func NewRequestDnsMessage(data []byte) (DNSMessage, error) {
+func ParseDNSMessage(data []byte) (DNSMessage, error) {
 	dnsHeader, err := parseHeader(data)
 	if err != nil {
 		return DNSMessage{}, err
 	}
-	questions, err := parseQuestions(data, dnsHeader)
+	questions, answerPtr, err := parseQuestions(data, dnsHeader)
 	if err != nil {
 		return DNSMessage{}, err
 	}
+	answers, err := parseAnswer(data, answerPtr, dnsHeader)
 	dnsMessage := DNSMessage{
 		Header:    dnsHeader,
 		Questions: questions,
+		Answers:   answers,
 	}
 	return dnsMessage, nil
 }
 
-func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
+func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, int, error) {
 	questions := []Question{}
 	// automatically start pointer at HEADER_SIZE to skip the initial 12 bytes becoming to the header
 	ptr := HEADER_SIZE
@@ -40,24 +42,24 @@ func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 
 	for range questionCount {
 		if ptr >= len(data) {
-			break
+			return questions, ptr, fmt.Errorf("Overflow ptr %d while having %d questions left to parse.", ptr, questionCount-len(questions))
 		}
 
 		// name processing:
 		labels, iterated, err := getLabels(data, ptr)
 		if err != nil {
-			return questions, err
+			return questions, ptr, err
 		}
 		ptr += iterated
 
 		if ptr+3 >= len(data) {
-			return questions, fmt.Errorf("Not enough bytes leftover for the Type and Class of the question")
+			return questions, ptr, fmt.Errorf("Not enough bytes leftover for the Type and Class of the question")
 		}
 
 		q := Question{
+			Name:  labels,
 			Type:  binary.BigEndian.Uint16(data[ptr : ptr+2]),
 			Class: binary.BigEndian.Uint16(data[ptr+2 : ptr+4]),
-			Name:  labels,
 		}
 		ptr += 4
 
@@ -65,10 +67,61 @@ func parseQuestions(data []byte, dnsHeader DNSHeader) ([]Question, error) {
 	}
 
 	if questionCount != len(questions) {
-		return questions, fmt.Errorf("question count listed in headers did not match actual questions parsed")
+		return questions, ptr, fmt.Errorf("question count listed in headers did not match actual questions parsed")
 	}
 
-	return questions, nil
+	return questions, ptr, nil
+}
+
+func parseAnswer(data []byte, startPtr int, dnsHeader DNSHeader) ([]Answer, error) {
+	answerCount := int(dnsHeader.AnswerCount)
+	answers := make([]Answer, 0, answerCount)
+
+	if answerCount > 0 && startPtr >= len(data) {
+		return answers, fmt.Errorf("Overflow starting answer ptr %d while having %d answers to parse.", startPtr, answerCount)
+	}
+
+	ptr := startPtr
+
+	for range answerCount {
+		if ptr >= len(data) {
+			return answers, fmt.Errorf("Overflow ptr %d while having %d answers left to parse.", ptr, answerCount-len(answers))
+		}
+
+		// name processing:
+		labels, iterated, err := getLabels(data, ptr)
+		if err != nil {
+			return answers, err
+		}
+		ptr += iterated
+
+		if ptr+10 >= len(data) {
+			return answers, fmt.Errorf("Not enough bytes leftover for the Type, Class, TTL, DataLength of the answer")
+		}
+
+		answerType := binary.BigEndian.Uint16(data[ptr : ptr+2])
+		answerClass := binary.BigEndian.Uint16(data[ptr+2 : ptr+4])
+		ttl := binary.BigEndian.Uint32(data[ptr+4 : ptr+8])
+		dataLength := int(binary.BigEndian.Uint16(data[ptr+8 : ptr+10]))
+		ptr += 10
+
+		if ptr+dataLength >= len(data) {
+			return answers, fmt.Errorf("Not enough bytes leftover at ptr %d and a data length of %d to parse the data of the answer", ptr, dataLength)
+		}
+		answerData := data[ptr : ptr+dataLength]
+		ptr += dataLength
+
+		a := Answer{
+			Name:  labels,
+			Type:  answerType,
+			Class: answerClass,
+			TTL:   ttl,
+			Data:  answerData,
+		}
+		answers = append(answers, a)
+	}
+
+	return answers, nil
 }
 
 // name processing. the name is always the first field of a question and is made up of labels.
